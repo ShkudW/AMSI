@@ -1,0 +1,9 @@
+$output = nslookup -type=TXT command.connect.menorraitdev.net | Out-String
+
+# מחלץ את הערך מתוך השורה שמכילה את התוצאה בלבד
+if ($output -match 'text\s*=\s*"(.*?)"') {
+    $result = $matches[1]
+}
+
+# הצגת הערך
+Write-Output $result
